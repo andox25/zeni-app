@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zeni</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0e0e0e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Zeni">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Fraunces:ital,wght@0,300;0,600;1,300&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+/* ============================================================
+   CONFIG — reemplaza con tus credenciales de Supabase
+   ============================================================ */
+/* Las credenciales van en el JS más abajo */
+
+:root{
+  --bg:#0e0e0e;--surface:#181818;--surface2:#222;--border:#2e2e2e;
+  --text:#f0ede6;--muted:#666;--green:#4ade80;--green-dim:#1a3d27;
+  --red:#f87171;--red-dim:#3d1a1a;--amber:#fbbf24;--amber-dim:#3d2f0a;
+  --blue:#60a5fa;--blue-dim:#0f2240;--purple:#c084fc;
+  --accent:#d4af37;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;min-height:100vh}
+
+/* ============================================================
+   AUTH SCREEN
+   ============================================================ */
+#auth-screen{
+  position:fixed;inset:0;background:var(--bg);display:flex;
+  align-items:center;justify-content:center;z-index:1000;padding:1.5rem;
+}
+.auth-card{
+  width:100%;max-width:400px;background:var(--surface);
+  border:1px solid var(--border);border-radius:16px;padding:2.5rem 2rem;
+}
+.auth-logo{
+  font-family:'Fraunces',serif;font-weight:300;font-size:2.5rem;
+  color:var(--accent);letter-spacing:-1px;text-align:center;margin-bottom:4px;
+}
+.auth-tagline{
+  font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;
+  text-align:center;margin-bottom:2rem;
+}
+.auth-divider{
+  display:flex;align-items:center;gap:12px;margin:1.25rem 0;
+}
+.auth-divider::before,.auth-divider::after{
+  content:'';flex:1;height:1px;background:var(--border);
+}
+.auth-divider span{font-size:10px;color:var(--muted);letter-spacing:1px;}
+
+.btn-google{
+  width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;
+  background:#fff;color:#1a1a1a;font-family:'DM Mono',monospace;font-size:12px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;
+  transition:all .2s;letter-spacing:.5px;font-weight:500;
+}
+.btn-google:hover{background:#f5f5f5;border-color:#ccc;}
+.btn-google svg{flex-shrink:0;}
+
+.form-group{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;}
+.form-label{font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;}
+.form-input{
+  background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  color:var(--text);font-family:'DM Mono',monospace;font-size:12px;padding:10px 12px;
+  width:100%;transition:border .2s;
+}
+.form-input:focus{outline:none;border-color:var(--accent);}
+.form-input::placeholder{color:var(--muted);}
+
+.btn-primary{
+  width:100%;padding:12px;font-size:12px;font-family:'DM Mono',monospace;
+  border:1px solid var(--accent);border-radius:8px;background:var(--accent);
+  color:#000;cursor:pointer;letter-spacing:1px;text-transform:uppercase;
+  transition:all .2s;font-weight:500;margin-top:4px;
+}
+.btn-primary:hover{background:#c9a430;}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;}
+
+.auth-toggle{
+  text-align:center;margin-top:1.25rem;font-size:11px;color:var(--muted);
+}
+.auth-toggle a{color:var(--accent);cursor:pointer;text-decoration:none;}
+.auth-toggle a:hover{text-decoration:underline;}
+
+.auth-error{
+  background:var(--red-dim);border:1px solid var(--red);border-radius:6px;
+  padding:8px 12px;font-size:11px;color:var(--red);margin-bottom:12px;display:none;
+}
+
+/* ============================================================
+   CONFIRM EMAIL SCREEN
+   ============================================================ */
+#confirm-screen{
+  position:fixed;inset:0;background:var(--bg);display:none;
+  align-items:center;justify-content:center;z-index:1000;padding:1.5rem;
+}
+.confirm-card{
+  width:100%;max-width:400px;background:var(--surface);
+  border:1px solid var(--accent);border-radius:16px;padding:2.5rem 2rem;text-align:center;
+}
+.confirm-icon{font-size:3rem;margin-bottom:1rem;}
+.confirm-title{
+  font-family:'Fraunces',serif;font-weight:300;font-size:1.5rem;
+  color:var(--accent);margin-bottom:.75rem;
+}
+.confirm-text{font-size:12px;color:var(--muted);line-height:1.7;margin-bottom:1.5rem;}
+.confirm-email{color:var(--text);font-weight:500;}
+.btn-secondary{
+  padding:10px 20px;font-size:11px;font-family:'DM Mono',monospace;
+  border:1px solid var(--border);border-radius:8px;background:transparent;
+  color:var(--muted);cursor:pointer;letter-spacing:1px;text-transform:uppercase;
+  transition:all .2s;
+}
+.btn-secondary:hover{border-color:var(--accent);color:var(--accent);}
+
+/* ============================================================
+   USER BAR
+   ============================================================ */
+#user-bar{
+  display:none;background:var(--surface);border-bottom:1px solid var(--border);
+  padding:8px 1.5rem;align-items:center;gap:10px;justify-content:space-between;
+}
+.user-info{display:flex;align-items:center;gap:8px;}
+.user-avatar{
+  width:28px;height:28px;border-radius:50%;background:var(--surface2);
+  border:1px solid var(--accent);display:flex;align-items:center;justify-content:center;
+  font-size:11px;color:var(--accent);overflow:hidden;flex-shrink:0;
+}
+.user-avatar img{width:100%;height:100%;object-fit:cover;}
+.user-email{font-size:10px;color:var(--muted);letter-spacing:.5px;}
+.btn-logout{
+  font-size:10px;color:var(--muted);background:none;border:1px solid var(--border);
+  border-radius:4px;padding:4px 10px;cursor:pointer;font-family:'DM Mono',monospace;
+  letter-spacing:1px;text-transform:uppercase;transition:all .2s;
+}
+.btn-logout:hover{border-color:var(--red);color:var(--red);}
+
+/* ============================================================
+   APP MAIN
+   ============================================================ */
+#app-screen{display:none;}
+#app-content{padding:2rem 1.5rem;max-width:900px;margin:0 auto;}
+
+h1{font-family:'Fraunces',serif;font-weight:300;font-size:2.2rem;color:var(--accent);letter-spacing:-0.5px}
+.subtitle{font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:1.5rem;margin-top:2px}
+.month-nav{display:flex;align-items:center;gap:12px;margin-bottom:1.5rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 16px;width:fit-content}
+.month-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;padding:0 4px;line-height:1}
+.month-btn:hover{color:var(--accent)}
+.month-label{font-family:'Fraunces',serif;font-size:1.2rem;font-weight:600;color:var(--text);min-width:150px;text-align:center}
+.tabs{display:flex;gap:0;margin-bottom:1.5rem;border:1px solid var(--border);border-radius:8px;overflow:hidden;flex-wrap:wrap}
+.tab{padding:8px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;border:none;background:transparent;color:var(--muted);letter-spacing:1px;text-transform:uppercase;transition:all .2s;border-right:1px solid var(--border)}
+.tab:last-child{border-right:none}
+.tab.active{background:var(--accent);color:#000;font-weight:500}
+.tab:hover:not(.active){background:var(--surface2);color:var(--text)}
+.section{display:none}.section.active{display:block}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:1.5rem}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem}
+.card-label{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.card-value{font-size:1.3rem;font-family:'Fraunces',serif;font-weight:600}
+.card.alert-card{border-color:var(--red)}
+.pos{color:var(--green)}.neg{color:var(--red)}.neu{color:var(--amber)}.inf{color:var(--blue)}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1.25rem;margin-bottom:1rem}
+.panel-title{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:1rem}
+.panel.warn{border-color:var(--amber)}.panel.danger{border-color:var(--red)}.panel.good{border-color:var(--green)}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;align-items:end}
+input,select{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;padding:8px 10px;width:100%;transition:border .2s}
+input:focus,select:focus{outline:none;border-color:var(--accent)}
+input::placeholder{color:var(--muted)}
+select option{background:var(--surface2)}
+.btn{padding:8px 14px;font-size:11px;font-family:'DM Mono',monospace;border:1px solid var(--accent);border-radius:6px;background:transparent;color:var(--accent);cursor:pointer;letter-spacing:1px;text-transform:uppercase;white-space:nowrap;transition:all .2s;width:100%}
+.btn:hover{background:var(--accent);color:#000}
+.btn-sm{padding:5px 9px;font-size:10px;width:auto}
+.btn-edit{border-color:var(--blue);color:var(--blue)}.btn-edit:hover{background:var(--blue);color:#000}
+.btn-del{border-color:var(--border);color:var(--muted)}.btn-del:hover{border-color:var(--red);color:var(--red);background:transparent}
+.btn-danger{border-color:var(--red);color:var(--red)}.btn-danger:hover{background:var(--red);color:#000}
+.tx-list{display:flex;flex-direction:column;gap:6px}
+.tx{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;background:var(--surface2)}
+.tx-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.tx-desc{flex:1;font-size:12px}
+.tx-cat{font-size:10px;color:var(--muted)}
+.tx-amount{font-size:13px;font-weight:500;white-space:nowrap}
+.tx-date{font-size:10px;color:var(--muted);white-space:nowrap}
+.tx-actions{display:flex;gap:4px;flex-shrink:0}
+.empty{text-align:center;color:var(--muted);font-size:12px;padding:2rem 0}
+.debt-item{display:flex;align-items:center;gap:10px;padding:10px;border-radius:6px;background:var(--surface2);margin-bottom:6px}
+.debt-info{flex:1}
+.debt-name{font-size:13px;margin-bottom:2px}
+.debt-meta{font-size:10px;color:var(--muted)}
+.debt-amount{font-size:1.1rem;font-family:'Fraunces',serif;color:var(--red);white-space:nowrap}
+.debt-actions{display:flex;gap:4px}
+.fondo-item{display:flex;align-items:center;gap:10px;padding:10px;border-radius:6px;background:var(--surface2);margin-bottom:6px}
+.fondo-info{flex:1}
+.fondo-name{font-size:13px;margin-bottom:2px}
+.fondo-total{font-size:10px;color:var(--green)}
+.fondo-actions{display:flex;gap:4px}
+.sync-indicator{font-size:10px;color:var(--muted);text-align:right;margin-bottom:.5rem;}
+.sync-indicator.syncing{color:var(--amber);}
+.sync-indicator.synced{color:var(--green);}
+.sync-indicator.error{color:var(--red);}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     AUTH SCREEN
+     ============================================================ -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-logo">Zeni</div>
+    <div class="auth-tagline">¿Dónde realmente va tu dinero?</div>
+
+    <div class="auth-error" id="auth-error"></div>
+
+    <!-- Google -->
+    <button class="btn-google" onclick="loginGoogle()">
+      <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 0 0 2.38-5.88c0-.57-.05-.66-.15-1.18z"/><path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2a4.8 4.8 0 0 1-7.18-2.54H1.83v2.07A8 8 0 0 0 8.98 17z"/><path fill="#FBBC05" d="M4.5 10.52a4.8 4.8 0 0 1 0-3.04V5.41H1.83a8 8 0 0 0 0 7.18l2.67-2.07z"/><path fill="#EA4335" d="M8.98 4.18c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 0 0 1.83 5.4L4.5 7.49a4.77 4.77 0 0 1 4.48-3.3z"/></svg>
+      Continuar con Google
+    </button>
+
+    <div class="auth-divider"><span>o</span></div>
+
+    <!-- Formulario login/register -->
+    <div id="auth-form-register">
+      <div class="form-group">
+        <label class="form-label">Correo electrónico</label>
+        <input type="email" id="reg-email" class="form-input" placeholder="tu@correo.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Contraseña</label>
+        <input type="password" id="reg-password" class="form-input" placeholder="Mínimo 8 caracteres">
+      </div>
+      <button class="btn-primary" onclick="registerEmail()">Crear cuenta</button>
+      <div class="auth-toggle">¿Ya tienes cuenta? <a onclick="showLogin()">Inicia sesión</a></div>
+    </div>
+
+    <div id="auth-form-login" style="display:none">
+      <div class="form-group">
+        <label class="form-label">Correo electrónico</label>
+        <input type="email" id="login-email" class="form-input" placeholder="tu@correo.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Contraseña</label>
+        <input type="password" id="login-password" class="form-input" placeholder="Tu contraseña">
+      </div>
+      <button class="btn-primary" onclick="loginEmail()">Iniciar sesión</button>
+      <div class="auth-toggle">¿No tienes cuenta? <a onclick="showRegister()">Regístrate gratis</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     CONFIRM EMAIL SCREEN
+     ============================================================ -->
+<div id="confirm-screen" style="display:none;position:fixed;inset:0;background:var(--bg);align-items:center;justify-content:center;z-index:1000;padding:1.5rem;">
+  <div class="confirm-card">
+    <div class="confirm-icon">📬</div>
+    <div class="confirm-title">Revisa tu correo</div>
+    <p class="confirm-text">
+      Enviamos un enlace de confirmación a<br>
+      <span class="confirm-email" id="confirm-email-display"></span><br><br>
+      Haz clic en el enlace para activar tu cuenta y entrar a Zeni.
+    </p>
+    <button class="btn-secondary" onclick="showLogin()">Ya confirmé → Iniciar sesión</button>
+  </div>
+</div>
+
+<!-- ============================================================
+     USER BAR
+     ============================================================ -->
+<div id="user-bar">
+  <div class="user-info">
+    <div class="user-avatar" id="user-avatar">—</div>
+    <span class="user-email" id="user-email-display"></span>
+  </div>
+  <button class="btn-logout" onclick="logout()">Cerrar sesión</button>
+</div>
+
+<!-- ============================================================
+     APP SCREEN
+     ============================================================ -->
+<div id="app-screen">
+  <div id="app-content">
+    <h1>Zeni</h1>
+    <div class="subtitle">¿dónde realmente va tu dinero?</div>
+
+    <div class="sync-indicator" id="sync-status">· sincronizado</div>
+
+    <div class="month-nav">
+      <button class="month-btn" onclick="changeMonth(-1)">‹</button>
+      <div class="month-label" id="monthLabel">—</div>
+      <button class="month-btn" onclick="changeMonth(1)">›</button>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('resumen')">Resumen</button>
+      <button class="tab" onclick="switchTab('movimientos')">Movimientos</button>
+      <button class="tab" onclick="switchTab('deudas')">Deudas</button>
+      <button class="tab" onclick="switchTab('fondos')">Fondos</button>
+    </div>
+
+    <!-- RESUMEN -->
+    <div class="section active" id="tab-resumen">
+      <div class="cards">
+        <div class="card"><div class="card-label">Ingresos</div><div class="card-value pos" id="s-ingresos">$0.00</div></div>
+        <div class="card"><div class="card-label">Gastos</div><div class="card-value neg" id="s-gastos">$0.00</div></div>
+        <div class="card"><div class="card-label">Balance</div><div class="card-value" id="s-balance">$0.00</div></div>
+        <div class="card alert-card"><div class="card-label">Total deudas</div><div class="card-value neg" id="s-deudas">$0.00</div></div>
+      </div>
+      <div class="panel" id="panel-movs-recientes">
+        <div class="panel-title">Últimos movimientos</div>
+        <div class="tx-list" id="list-recientes"></div>
+      </div>
+    </div>
+
+    <!-- MOVIMIENTOS -->
+    <div class="section" id="tab-movimientos">
+      <div class="panel">
+        <div class="panel-title">Nuevo movimiento</div>
+        <div class="form-grid">
+          <div>
+            <div class="form-label" style="font-size:10px;color:var(--muted);margin-bottom:4px;">Tipo</div>
+            <select id="m-tipo" onchange="updateSubtipo()">
+              <option value="gasto">Gasto</option>
+              <option value="ingreso">Ingreso</option>
+            </select>
+          </div>
+          <div>
+            <div class="form-label" style="font-size:10px;color:var(--muted);margin-bottom:4px;">Subtipo</div>
+            <select id="m-subtipo">
+              <option value="variable">Variable</option>
+              <option value="fijo">Fijo</option>
+            </select>
+          </div>
+          <div>
+            <div class="form-label" style="font-size:10px;color:var(--muted);margin-bottom:4px;">Descripción</div>
+            <input type="text" id="m-desc" placeholder="¿Qué fue?">
+          </div>
+          <div>
+            <div class="form-label" style="font-size:10px;color:var(--muted);margin-bottom:4px;">Monto ($)</div>
+            <input type="number" id="m-monto" placeholder="0.00" step="0.01" min="0">
+          </div>
+          <div>
+            <div class="form-label" style="font-size:10px;color:var(--muted);margin-bottom:4px;">Fecha</div>
+            <input type="date" id="m-fecha">
+          </div>
+          <div>
+            <div class="form-label" style="font-size:10px;color:var(--muted);margin-bottom:4px;">Categoría</div>
+            <select id="m-cat">
+              <option>Comida</option><option>Transporte</option><option>Vivienda</option>
+              <option>Salud</option><option>Entretenimiento</option><option>Colegio / hija</option>
+              <option>Pago Préstamo</option><option>Inversión</option><option>Alquiler</option>
+              <option>Servicios</option><option>Ropa</option><option>Otro gasto</option>
+              <option>Otro ingreso</option><option>Salario</option>
+            </select>
+          </div>
+          <div>
+            <div class="form-label" style="font-size:10px;color:var(--muted);margin-bottom:4px;">Nota</div>
+            <input type="text" id="m-nota" placeholder="Opcional">
+          </div>
+          <div style="display:flex;align-items:flex-end;">
+            <button class="btn" onclick="addMovimiento()">+ Agregar</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Movimientos del mes</div>
+        <div class="tx-list" id="list-movimientos"></div>
+      </div>
+    </div>
+
+    <!-- DEUDAS -->
+    <div class="section" id="tab-deudas">
+      <div class="panel">
+        <div class="panel-title">Nueva deuda</div>
+        <div class="form-grid">
+          <div>
+            <div class="form-label" style="font-size:10px;color:var(--muted);margin-bottom:4px;">Acreedor</div>
+            <input type="text" id="d-acreedor" placeholder="¿A quién le debes?">
+          </div>
+          <div>
+            <div class="form-label" style="font-size:10px;color:var(--muted);margin-bottom:4px;">Saldo ($)</div>
+            <input type="number" id="d-saldo" placeholder="0.00" step="0.01" min="0">
+          </div>
+          <div>
+            <div class="form-label" style="font-size:10px;color:var(--muted);margin-bottom:4px;">Fecha de pago</div>
+            <input type="text" id="d-fecha" placeholder="Ej: Día 15">
+          </div>
+          <div>
+            <div class="form-label" style="font-size:10px;color:var(--muted);margin-bottom:4px;">Nota</div>
+            <input type="text" id="d-nota" placeholder="Opcional">
+          </div>
+          <div style="display:flex;align-items:flex-end;">
+            <button class="btn" onclick="addDeuda()">+ Agregar</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Deudas activas</div>
+        <div id="list-deudas"></div>
+      </div>
+    </div>
+
+    <!-- FONDOS -->
+    <div class="section" id="tab-fondos">
+      <div class="panel">
+        <div class="panel-title">Nuevo fondo</div>
+        <div class="form-grid">
+          <div>
+            <div class="form-label" style="font-size:10px;color:var(--muted);margin-bottom:4px;">Nombre del fondo</div>
+            <input type="text" id="f-nombre" placeholder="Ej: Fondo vacaciones">
+          </div>
+          <div style="display:flex;align-items:flex-end;">
+            <button class="btn" onclick="addFondo()">+ Crear fondo</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">Mis fondos</div>
+        <div id="list-fondos"></div>
+      </div>
+    </div>
+
+  </div><!-- /app-content -->
+</div><!-- /app-screen -->
+
+
+<script>
+// ============================================================
+// ⚙️  CONFIGURACIÓN — Pega tus credenciales de Supabase aquí
+// ============================================================
+const SUPABASE_URL  = 'TU_SUPABASE_URL';   // https://xxxx.supabase.co
+const SUPABASE_KEY  = 'TU_SUPABASE_ANON_KEY'; // eyJh...
+
+// ============================================================
+// INIT SUPABASE
+// ============================================================
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let currentUser  = null;
+let currentMonth = new Date().toISOString().slice(0,7); // "2026-05"
+let data = { movimientos: [], deudas: [], fondos: [] };
+
+// ============================================================
+// AUTH FUNCTIONS
+// ============================================================
+async function loginGoogle() {
+  showError('');
+  const { error } = await db.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: window.location.origin }
+  });
+  if (error) showError(error.message);
+}
+
+async function registerEmail() {
+  const email    = document.getElementById('reg-email').value.trim();
+  const password = document.getElementById('reg-password').value;
+  if (!email || !password) return showError('Completa todos los campos.');
+  if (password.length < 8) return showError('La contraseña debe tener al menos 8 caracteres.');
+
+  showError('');
+  const btn = document.querySelector('#auth-form-register .btn-primary');
+  btn.disabled = true; btn.textContent = 'Creando cuenta...';
+
+  const { error } = await db.auth.signUp({
+    email, password,
+    options: { emailRedirectTo: window.location.origin }
+  });
+
+  btn.disabled = false; btn.textContent = 'Crear cuenta';
+  if (error) { showError(error.message); return; }
+
+  document.getElementById('confirm-email-display').textContent = email;
+  document.getElementById('auth-screen').style.display = 'none';
+  const cs = document.getElementById('confirm-screen');
+  cs.style.display = 'flex';
+}
+
+async function loginEmail() {
+  const email    = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  if (!email || !password) return showError('Completa todos los campos.');
+
+  showError('');
+  const btn = document.querySelector('#auth-form-login .btn-primary');
+  btn.disabled = true; btn.textContent = 'Entrando...';
+
+  const { error } = await db.auth.signInWithPassword({ email, password });
+  btn.disabled = false; btn.textContent = 'Iniciar sesión';
+  if (error) showError('Correo o contraseña incorrectos.');
+}
+
+async function logout() {
+  await db.auth.signOut();
+  data = { movimientos: [], deudas: [], fondos: [] };
+  currentUser = null;
+}
+
+function showError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+function showLogin()    { document.getElementById('auth-form-register').style.display='none'; document.getElementById('auth-form-login').style.display='block'; document.getElementById('confirm-screen').style.display='none'; document.getElementById('auth-screen').style.display='flex'; showError(''); }
+function showRegister() { document.getElementById('auth-form-login').style.display='none'; document.getElementById('auth-form-register').style.display='block'; showError(''); }
+
+// ============================================================
+// AUTH STATE LISTENER
+// ============================================================
+db.auth.onAuthStateChange(async (event, session) => {
+  if (session && session.user) {
+    currentUser = session.user;
+    document.getElementById('auth-screen').style.display    = 'none';
+    document.getElementById('confirm-screen').style.display = 'none';
+    document.getElementById('user-bar').style.display       = 'flex';
+    document.getElementById('app-screen').style.display     = 'block';
+
+    // User bar
+    const email = currentUser.email;
+    const avatar = currentUser.user_metadata?.avatar_url;
+    document.getElementById('user-email-display').textContent = email;
+    const avatarEl = document.getElementById('user-avatar');
+    if (avatar) avatarEl.innerHTML = `<img src="${avatar}" alt="">`;
+    else avatarEl.textContent = email[0].toUpperCase();
+
+    await loadAllData();
+    renderAll();
+  } else {
+    currentUser = null;
+    document.getElementById('auth-screen').style.display    = 'flex';
+    document.getElementById('user-bar').style.display       = 'none';
+    document.getElementById('app-screen').style.display     = 'none';
+  }
+});
+
+// ============================================================
+// DATA FUNCTIONS
+// ============================================================
+async function loadAllData() {
+  setSyncStatus('syncing');
+  try {
+    const [movRes, deuRes, fonRes] = await Promise.all([
+      db.from('movimientos').select('*').eq('user_id', currentUser.id).order('fecha', {ascending:false}),
+      db.from('deudas').select('*').eq('user_id', currentUser.id).order('created_at', {ascending:false}),
+      db.from('fondos').select('*').eq('user_id', currentUser.id).order('created_at', {ascending:true}),
+    ]);
+    data.movimientos = movRes.data || [];
+    data.deudas      = deuRes.data || [];
+    data.fondos      = fonRes.data || [];
+    setSyncStatus('synced');
+  } catch(e) { setSyncStatus('error'); }
+}
+
+function setSyncStatus(status) {
+  const el = document.getElementById('sync-status');
+  el.className = 'sync-indicator ' + status;
+  if (status === 'syncing') el.textContent = '· sincronizando...';
+  else if (status === 'synced') el.textContent = '· sincronizado';
+  else el.textContent = '· error de conexión';
+}
+
+// ============================================================
+// MOVIMIENTOS
+// ============================================================
+async function addMovimiento() {
+  const tipo  = document.getElementById('m-tipo').value;
+  const desc  = document.getElementById('m-desc').value.trim();
+  const monto = parseFloat(document.getElementById('m-monto').value);
+  const fecha = document.getElementById('m-fecha').value;
+  const cat   = document.getElementById('m-cat').value;
+  const nota  = document.getElementById('m-nota').value.trim();
+  const subtipo = document.getElementById('m-subtipo').value;
+
+  if (!desc || !monto || !fecha) return alert('Completa descripción, monto y fecha.');
+
+  const { data: inserted, error } = await db.from('movimientos').insert([{
+    user_id: currentUser.id, tipo, subtipo, descripcion: desc,
+    monto, fecha, categoria: cat, nota
+  }]).select().single();
+
+  if (error) { alert('Error al guardar.'); return; }
+  data.movimientos.unshift(inserted);
+
+  // Limpiar form
+  document.getElementById('m-desc').value = '';
+  document.getElementById('m-monto').value = '';
+  document.getElementById('m-nota').value = '';
+  document.getElementById('m-fecha').value = new Date().toISOString().split('T')[0];
+
+  renderAll();
+}
+
+async function deleteMovimiento(id) {
+  if (!confirm('¿Eliminar este movimiento?')) return;
+  await db.from('movimientos').delete().eq('id', id);
+  data.movimientos = data.movimientos.filter(m => m.id !== id);
+  renderAll();
+}
+
+// ============================================================
+// DEUDAS
+// ============================================================
+async function addDeuda() {
+  const acreedor  = document.getElementById('d-acreedor').value.trim();
+  const saldo     = parseFloat(document.getElementById('d-saldo').value);
+  const fecha_pago = document.getElementById('d-fecha').value.trim();
+  const nota      = document.getElementById('d-nota').value.trim();
+
+  if (!acreedor || !saldo) return alert('Completa acreedor y saldo.');
+
+  const { data: inserted, error } = await db.from('deudas').insert([{
+    user_id: currentUser.id, acreedor, saldo, fecha_pago, nota
+  }]).select().single();
+
+  if (error) { alert('Error al guardar.'); return; }
+  data.deudas.unshift(inserted);
+
+  document.getElementById('d-acreedor').value = '';
+  document.getElementById('d-saldo').value = '';
+  document.getElementById('d-fecha').value = '';
+  document.getElementById('d-nota').value = '';
+
+  renderAll();
+}
+
+async function deleteDeuda(id) {
+  if (!confirm('¿Eliminar esta deuda?')) return;
+  await db.from('deudas').delete().eq('id', id);
+  data.deudas = data.deudas.filter(d => d.id !== id);
+  renderAll();
+}
+
+// ============================================================
+// FONDOS
+// ============================================================
+async function addFondo() {
+  const nombre = document.getElementById('f-nombre').value.trim();
+  if (!nombre) return alert('Escribe el nombre del fondo.');
+
+  const { data: inserted, error } = await db.from('fondos').insert([{
+    user_id: currentUser.id, nombre
+  }]).select().single();
+
+  if (error) { alert('Error al guardar.'); return; }
+  data.fondos.push(inserted);
+  document.getElementById('f-nombre').value = '';
+  renderAll();
+}
+
+async function deleteFondo(id) {
+  if (!confirm('¿Eliminar este fondo?')) return;
+  await db.from('fondos').delete().eq('id', id);
+  data.fondos = data.fondos.filter(f => f.id !== id);
+  renderAll();
+}
+
+// ============================================================
+// NAVEGACIÓN POR MES
+// ============================================================
+function changeMonth(dir) {
+  const [y, m] = currentMonth.split('-').map(Number);
+  const d = new Date(y, m - 1 + dir, 1);
+  currentMonth = d.toISOString().slice(0,7);
+  renderAll();
+}
+
+function monthLabel(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  const names = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  return `${names[m-1]} ${y}`;
+}
+
+// ============================================================
+// TABS
+// ============================================================
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    const tabs = ['resumen','movimientos','deudas','fondos'];
+    t.classList.toggle('active', tabs[i] === tab);
+  });
+  document.querySelectorAll('.section').forEach((s,i) => {
+    const tabs = ['resumen','movimientos','deudas','fondos'];
+    s.classList.toggle('active', tabs[i] === tab);
+  });
+}
+
+function updateSubtipo() {
+  const tipo = document.getElementById('m-tipo').value;
+  const sub  = document.getElementById('m-subtipo');
+  if (tipo === 'ingreso') {
+    sub.innerHTML = '<option value="">—</option>';
+  } else {
+    sub.innerHTML = '<option value="variable">Variable</option><option value="fijo">Fijo</option>';
+  }
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function renderAll() {
+  document.getElementById('monthLabel').textContent = monthLabel(currentMonth);
+  const movsMes = data.movimientos.filter(m => m.fecha && m.fecha.startsWith(currentMonth));
+  renderResumen(movsMes);
+  renderMovimientos(movsMes);
+  renderDeudas();
+  renderFondos();
+}
+
+function fmt(n) { return '$' + Math.abs(n).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+
+function renderResumen(movs) {
+  const ingresos = movs.filter(m=>m.tipo==='ingreso').reduce((a,m)=>a+Number(m.monto),0);
+  const gastos   = movs.filter(m=>m.tipo==='gasto').reduce((a,m)=>a+Number(m.monto),0);
+  const balance  = ingresos - gastos;
+  const totalDeudas = data.deudas.reduce((a,d)=>a+Number(d.saldo),0);
+
+  document.getElementById('s-ingresos').textContent = fmt(ingresos);
+  document.getElementById('s-gastos').textContent   = fmt(gastos);
+  const balEl = document.getElementById('s-balance');
+  balEl.textContent = fmt(balance);
+  balEl.className   = 'card-value ' + (balance >= 0 ? 'pos' : 'neg');
+  document.getElementById('s-deudas').textContent   = fmt(totalDeudas);
+
+  const recientes = movs.slice(0,5);
+  const listEl = document.getElementById('list-recientes');
+  if (!recientes.length) { listEl.innerHTML = '<div class="empty">Sin movimientos este mes</div>'; return; }
+  listEl.innerHTML = recientes.map(m => txRow(m)).join('');
+}
+
+function renderMovimientos(movs) {
+  const listEl = document.getElementById('list-movimientos');
+  if (!movs.length) { listEl.innerHTML = '<div class="empty">Sin movimientos este mes</div>'; return; }
+  listEl.innerHTML = movs.map(m => txRow(m, true)).join('');
+}
+
+function txRow(m, actions=false) {
+  const color = m.tipo === 'ingreso' ? 'var(--green)' : 'var(--red)';
+  const sign  = m.tipo === 'ingreso' ? '+' : '-';
+  const actHTML = actions ? `<div class="tx-actions"><button class="btn btn-sm btn-del" onclick="deleteMovimiento('${m.id}')">×</button></div>` : '';
+  return `<div class="tx">
+    <div class="tx-dot" style="background:${color}"></div>
+    <div style="flex:1;min-width:0">
+      <div class="tx-desc">${m.descripcion}</div>
+      <div class="tx-cat">${m.categoria}${m.nota ? ' · '+m.nota : ''}</div>
+    </div>
+    <div class="tx-amount" style="color:${color}">${sign}${fmt(m.monto)}</div>
+    <div class="tx-date">${m.fecha}</div>
+    ${actHTML}
+  </div>`;
+}
+
+function renderDeudas() {
+  const listEl = document.getElementById('list-deudas');
+  if (!data.deudas.length) { listEl.innerHTML = '<div class="empty">Sin deudas registradas</div>'; return; }
+  listEl.innerHTML = data.deudas.map(d => `
+    <div class="debt-item">
+      <div class="debt-info">
+        <div class="debt-name">${d.acreedor}</div>
+        <div class="debt-meta">${d.fecha_pago ? 'Vence: día '+d.fecha_pago : ''}${d.nota ? ' · '+d.nota : ''}</div>
+      </div>
+      <div class="debt-amount">${fmt(d.saldo)}</div>
+      <div class="debt-actions">
+        <button class="btn btn-sm btn-del" onclick="deleteDeuda('${d.id}')">×</button>
+      </div>
+    </div>`).join('');
+}
+
+function renderFondos() {
+  const listEl = document.getElementById('list-fondos');
+  if (!data.fondos.length) { listEl.innerHTML = '<div class="empty">Sin fondos creados</div>'; return; }
+  listEl.innerHTML = data.fondos.map(f => `
+    <div class="fondo-item">
+      <div class="fondo-info">
+        <div class="fondo-name">${f.nombre}</div>
+        <div class="fondo-total">$0.00 acumulado</div>
+      </div>
+      <div class="fondo-actions">
+        <button class="btn btn-sm btn-del" onclick="deleteFondo('${f.id}')">×</button>
+      </div>
+    </div>`).join('');
+}
+
+// ============================================================
+// INIT
+// ============================================================
+window.addEventListener('DOMContentLoaded', () => {
+  // Fecha de hoy por defecto en el form
+  document.getElementById('m-fecha').value = new Date().toISOString().split('T')[0];
+  renderAll();
+});
+</script>
+</body>
+</html>

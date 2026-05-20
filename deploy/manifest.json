@@ -1,0 +1,15 @@
+{
+  "name": "Zeni",
+  "short_name": "Zeni",
+  "description": "¿Dónde realmente va tu dinero?",
+  "start_url": "/finanzas_v5.html",
+  "display": "standalone",
+  "background_color": "#0e0e0e",
+  "theme_color": "#d4af37",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-192.png", "sizes": "180x180", "type": "image/png", "purpose": "apple touch icon" }
+  ]
+}

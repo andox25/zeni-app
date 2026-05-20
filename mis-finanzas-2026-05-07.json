@@ -1,0 +1,260 @@
+{
+  "2026-04": {
+    "movimientos": [
+      {
+        "id": 1777912843751,
+        "tipo": "ingreso",
+        "subtipo": "",
+        "desc": "Mensualidad Mayo",
+        "monto": 364.58,
+        "fecha": "2026-05-04",
+        "cat": "Alquiler",
+        "nota": "Mallorca Pago Mayo"
+      },
+      {
+        "id": 1777916735345,
+        "tipo": "gasto",
+        "subtipo": "variable",
+        "desc": "M/S Mimi Costq D Este",
+        "monto": 20,
+        "fecha": "2026-05-04",
+        "cat": "Otro gasto",
+        "nota": "VAPE"
+      },
+      {
+        "id": 1777916765677,
+        "tipo": "gasto",
+        "subtipo": "variable",
+        "desc": "M/S Mimi Costa D Este",
+        "monto": 3.75,
+        "fecha": "2026-05-04",
+        "cat": "Comida",
+        "nota": "Almuerzo"
+      },
+      {
+        "id": 1777917058361,
+        "tipo": "gasto",
+        "subtipo": "variable",
+        "desc": "Yappi Rosa Prestamista",
+        "monto": 25,
+        "fecha": "2026-05-04",
+        "cat": "Pago Préstamo",
+        "nota": "intereses 1 de mayo"
+      },
+      {
+        "id": 1777917628384,
+        "tipo": "gasto",
+        "subtipo": "variable",
+        "desc": "Prestamista Magaly",
+        "monto": 100,
+        "fecha": "2026-05-04",
+        "cat": "Pago Préstamo",
+        "nota": "abono deuda magaly"
+      },
+      {
+        "id": 1777917911017,
+        "tipo": "ingreso",
+        "subtipo": "",
+        "desc": "Intereses Banistmo",
+        "monto": 0.89,
+        "fecha": "2026-05-04",
+        "cat": "Inversión",
+        "nota": "Intereses cuenta Ahorros"
+      },
+      {
+        "id": 1777920487923,
+        "tipo": "gasto",
+        "subtipo": "variable",
+        "desc": "Semana Lou",
+        "monto": 30,
+        "fecha": "2026-05-04",
+        "cat": "Colegio / hija",
+        "nota": "semana del 4-8"
+      },
+      {
+        "id": 1777987920428,
+        "tipo": "gasto",
+        "subtipo": "variable",
+        "desc": "Gasolina BAE",
+        "monto": 20,
+        "fecha": "2026-05-04",
+        "cat": "Vivienda 2",
+        "nota": ""
+      },
+      {
+        "id": 1778010962921,
+        "tipo": "gasto",
+        "subtipo": "variable",
+        "desc": "Almuerzo",
+        "monto": 6,
+        "fecha": "2026-05-05",
+        "cat": "Comida",
+        "nota": "Comida Chatarra"
+      },
+      {
+        "id": 1778022811706,
+        "tipo": "gasto",
+        "subtipo": "variable",
+        "desc": "Supermercado D73",
+        "monto": 29.09,
+        "fecha": "2026-05-05",
+        "cat": "Comida",
+        "nota": "Super 99 Costa D Este"
+      },
+      {
+        "id": 1778071893650,
+        "tipo": "gasto",
+        "subtipo": "variable",
+        "desc": "Medicamentos MCH",
+        "monto": 25.99,
+        "fecha": "2026-05-06",
+        "cat": "Salud",
+        "nota": "pastillas colesterol"
+      },
+      {
+        "id": 1778071916569,
+        "tipo": "gasto",
+        "subtipo": "variable",
+        "desc": "Yappi KMNG",
+        "monto": 10,
+        "fecha": "2026-05-06",
+        "cat": "Vivienda 2",
+        "nota": "Envio yappi KMNG"
+      },
+      {
+        "id": 1778071945116,
+        "tipo": "gasto",
+        "subtipo": "variable",
+        "desc": "Desayuno",
+        "monto": 13.15,
+        "fecha": "2026-05-06",
+        "cat": "Comida",
+        "nota": "Rincon tableño chasis"
+      },
+      {
+        "id": 1778109704470,
+        "tipo": "gasto",
+        "subtipo": "variable",
+        "desc": "cafe",
+        "monto": 18.72,
+        "fecha": "2026-05-06",
+        "cat": "Comida",
+        "nota": "charlies creem con BAE"
+      },
+      {
+        "id": 1778158510992,
+        "tipo": "gasto",
+        "subtipo": "variable",
+        "desc": "Yappi KMNG",
+        "monto": 20,
+        "fecha": "2026-05-06",
+        "cat": "Vivienda 2",
+        "nota": "yappi  gasolina KMNG"
+      },
+      {
+        "id": 1778158551409,
+        "tipo": "gasto",
+        "subtipo": "variable",
+        "desc": "Marian Yappi",
+        "monto": 15,
+        "fecha": "2026-05-06",
+        "cat": "Entretenimiento",
+        "nota": "Yappi MS"
+      },
+      {
+        "id": 1778158573842,
+        "tipo": "gasto",
+        "subtipo": "variable",
+        "desc": "Desayuno",
+        "monto": 4.75,
+        "fecha": "2026-05-07",
+        "cat": "Comida",
+        "nota": "Desayuno Los Pueblos Frituras"
+      },
+      {
+        "id": 1778158712110,
+        "tipo": "ingreso",
+        "subtipo": "",
+        "desc": "Saldo Banistmo",
+        "monto": 2.43,
+        "fecha": "2026-05-07",
+        "cat": "Inversión",
+        "nota": "Banistmo Saldo"
+      }
+    ],
+    "deudas": [
+      {
+        "id": 1777916825927,
+        "acreedor": "Rosa Prestamisnta",
+        "saldo": 250,
+        "fechaPago": "1",
+        "nota": "10%  quincenal"
+      },
+      {
+        "id": 1777917182377,
+        "acreedor": "Juan Diego",
+        "saldo": 500,
+        "fechaPago": "15",
+        "nota": "Pago PS5"
+      },
+      {
+        "id": 1777917205543,
+        "acreedor": "Auto Go",
+        "saldo": 2000,
+        "fechaPago": "15",
+        "nota": "Cancelacion Volvo"
+      },
+      {
+        "id": 1777917268727,
+        "acreedor": "Magaly",
+        "saldo": 2000,
+        "fechaPago": "15-30",
+        "nota": "Prestamo 2k"
+      },
+      {
+        "id": 1777997257986,
+        "acreedor": "Global Entry",
+        "saldo": 120,
+        "fechaPago": "30",
+        "nota": "Global Entry Pago Anual"
+      },
+      {
+        "id": 1778159471445,
+        "acreedor": "Universidad Latina",
+        "saldo": 135.21,
+        "fechaPago": "14",
+        "nota": "Pago Mayo 7"
+      }
+    ],
+    "meta": null
+  },
+  "__global": {
+    "fondos": [
+      {
+        "id": 1777913507919,
+        "nombre": "Fondo Imprevistos",
+        "entradas": []
+      },
+      {
+        "id": 1777913531451,
+        "nombre": "Fondo Vacaciones Lou/Marcos",
+        "entradas": []
+      },
+      {
+        "id": 1777918426370,
+        "nombre": "Fondo D73",
+        "entradas": []
+      },
+      {
+        "id": 1777918436254,
+        "nombre": "Fondo LT",
+        "entradas": []
+      },
+      {
+        "id": 1777918448470,
+        "nombre": "Fondo Cabello",
+        "entradas": []
+      }
+    ]
+  }
+}
