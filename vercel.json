@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/(.*)", "destination": "/finanzas_v5.html" }
+    { "source": "/(.*)", "destination": "/finanzas_v4.html" }
   ],
   "headers": [
     {

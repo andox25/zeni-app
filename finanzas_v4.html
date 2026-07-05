@@ -10,7 +10,7 @@
   --bg:#0e0e0e;--surface:#181818;--surface2:#222;--border:#2e2e2e;
   --text:#f0ede6;--muted:#666;--green:#4ade80;--green-dim:#1a3d27;
   --red:#f87171;--red-dim:#3d1a1a;--amber:#fbbf24;--amber-dim:#3d2f0a;
-  --blue:#60a5fa;--blue-dim:#0f2240;--purple:#c084fc;
+  --blue:#60a5fa;--blue-dim:#0f2240;--purple:#c084fc;--purple-dim:#2b1a3d;
   --accent:#d4af37;
 }
 *{box-sizing:border-box;margin:0;padding:0}
@@ -89,6 +89,11 @@ select option{background:var(--surface2)}
 .save-toast.show{opacity:1}
 .explain-box{background:var(--surface2);border-left:3px solid var(--muted);border-radius:0 6px 6px 0;padding:10px 14px;font-size:12px;color:var(--muted);line-height:1.7;margin-bottom:1rem}
 .explain-box strong{color:var(--text)}
+.carry-banner{background:var(--surface);border:1px solid var(--accent);border-radius:8px;padding:1rem 1.2rem;margin-bottom:1.5rem}
+.carry-title{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:6px}
+.carry-msg{font-size:13px;line-height:1.7;margin-bottom:8px}
+.carry-item{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px}
+.carry-item span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style>
 </head>
 <body>
@@ -162,7 +167,8 @@ const CAT_GASTO={
   'Otro gasto':     {icon:'📌'}
 };
 
-let currentYear=START_YEAR, currentMonth=START_MONTH, editingId=null, activeTab='resumen';
+const _now=new Date();
+let currentYear=_now.getFullYear(), currentMonth=_now.getMonth(), editingId=null, activeTab='resumen';
 
 function monthKey(y,m){ return `${y}-${String(m).padStart(2,'0')}`; }
 function currentKey(){ return monthKey(currentYear,currentMonth); }
@@ -192,6 +198,7 @@ function changeMonth(dir){
   if(currentMonth<0){currentMonth=11;currentYear--;}
   if(currentYear<START_YEAR||(currentYear===START_YEAR&&currentMonth<START_MONTH)){currentMonth=START_MONTH;currentYear=START_YEAR;}
   document.getElementById('month-label').textContent=`${MONTHS_ES[currentMonth]} ${currentYear}`;
+  runCarryOver();
   render();
 }
 
@@ -207,8 +214,8 @@ function showTab(id,btn){
 function totals(md){
   const ingresos=md.movimientos.filter(m=>m.tipo==='ingreso').reduce((a,m)=>a+m.monto,0);
   const gastos=md.movimientos.filter(m=>m.tipo==='gasto').reduce((a,m)=>a+m.monto,0);
-  const fijos=md.movimientos.filter(m=>m.subtipo==='fijo').reduce((a,m)=>a+m.monto,0);
-  const variables=md.movimientos.filter(m=>m.subtipo==='variable'||m.subtipo==='quincenal'||m.subtipo==='semanal').reduce((a,m)=>a+m.monto,0);
+  const fijos=md.movimientos.filter(m=>m.tipo==='gasto'&&m.subtipo==='fijo').reduce((a,m)=>a+m.monto,0);
+  const variables=md.movimientos.filter(m=>m.tipo==='gasto'&&(m.subtipo==='variable'||m.subtipo==='quincenal'||m.subtipo==='semanal')).reduce((a,m)=>a+m.monto,0);
   const deudaTotal=md.deudas.reduce((a,d)=>a+d.saldo,0);
   return{ingresos,gastos,fijos,variables,deudaTotal,flujo:ingresos-gastos};
 }
@@ -234,7 +241,7 @@ function addMov(tipo){
   const fecha=document.getElementById(pre+'-fecha').value||today();
   const cat=document.getElementById(pre+'-cat').value;
   const nota=document.getElementById(pre+'-nota').value.trim();
-  const subtipo=tipo==='gasto'?document.getElementById('gas-subtipo').value:'';
+  const subtipo=document.getElementById(pre+'-subtipo').value;
   if(!desc||isNaN(monto)||monto<=0) return;
   md.movimientos.push({id:Date.now(),tipo,subtipo,desc,monto,fecha,cat,nota});
   saveMonth(md);
@@ -309,7 +316,8 @@ function saveMov(id){
   m.fecha=document.getElementById('e-fecha-'+id).value||m.fecha;
   m.cat=document.getElementById('e-cat-'+id).value;
   m.nota=document.getElementById('e-nota-'+id).value.trim();
-  if(m.tipo==='gasto') m.subtipo=document.getElementById('e-subtipo-'+id).value;
+  const st=document.getElementById('e-subtipo-'+id);
+  if(st) m.subtipo=st.value;
   if(!m.desc||isNaN(m.monto)||m.monto<=0) return;
   saveMonth(md); editingId=null; render();
 }
@@ -332,6 +340,95 @@ function saveMeta(){
   if(isNaN(val)||val<=0) return;
   md.meta=val;
   saveMonth(md); render();
+}
+
+/* ── CARRY-OVER (mes nuevo) ── */
+function runCarryOver(){
+  // Solo hacia adelante: nunca prellenar meses futuros al navegar con las flechas.
+  const now=new Date();
+  if(currentYear>now.getFullYear()||(currentYear===now.getFullYear()&&currentMonth>now.getMonth())) return;
+  const all=loadAll(), key=currentKey();
+  const cur=all[key];
+  // Si el mes ya tiene datos o ya se procesó el carry-over, no tocar nada.
+  if(cur&&(cur.carry||cur.movimientos.length>0||cur.deudas.length>0||cur.meta)) return;
+  // Buscar el mes más reciente con datos (hasta 6 meses atrás, sin pasar del inicio).
+  let py=currentYear, pm=currentMonth, prev=null;
+  for(let i=0;i<6;i++){
+    pm--; if(pm<0){pm=11;py--;}
+    if(py<START_YEAR||(py===START_YEAR&&pm<START_MONTH)) break;
+    const p=all[monthKey(py,pm)];
+    if(p&&((p.movimientos&&p.movimientos.length>0)||(p.deudas&&p.deudas.length>0))){prev=p;break;}
+  }
+  if(!prev) return;
+  const recurrentes=(prev.movimientos||[]).filter(m=>m.subtipo==='fijo'||m.subtipo==='quincenal');
+  const pendientes=(prev.deudas||[]).filter(d=>d.saldo>0);
+  if(recurrentes.length===0&&pendientes.length===0) return;
+  const md=cur||{movimientos:[],deudas:[],meta:null};
+  const fecha1=`${currentYear}-${String(currentMonth+1).padStart(2,'0')}-01`;
+  const base=Date.now();
+  const carry={fecha:today(),movIds:[],deudaIds:[],dismissed:false};
+  recurrentes.forEach((m,i)=>{
+    if(md.movimientos.some(x=>x.tipo===m.tipo&&x.desc===m.desc)) return;
+    const id=base+i;
+    md.movimientos.push({...m,id,fecha:fecha1});
+    carry.movIds.push(id);
+  });
+  pendientes.forEach((d,i)=>{
+    if(md.deudas.some(x=>x.acreedor.trim().toLowerCase()===d.acreedor.trim().toLowerCase())) return;
+    const id=base+1000+i;
+    md.deudas.push({...d,id});
+    carry.deudaIds.push(id);
+  });
+  if(carry.movIds.length===0&&carry.deudaIds.length===0) return;
+  md.carry=carry;
+  all[key]=md;
+  localStorage.setItem('finanzas-v4',JSON.stringify(all));
+}
+
+function dismissCarry(){
+  const md=getMonth();
+  if(md.carry){ md.carry.dismissed=true; saveMonth(md); }
+  render();
+}
+function undoCarryMov(id){
+  const md=getMonth();
+  md.movimientos=md.movimientos.filter(m=>m.id!==id);
+  if(md.carry) md.carry.movIds=md.carry.movIds.filter(x=>x!==id);
+  saveMonth(md); render();
+}
+function undoCarryDeuda(id){
+  const md=getMonth();
+  md.deudas=md.deudas.filter(d=>d.id!==id);
+  if(md.carry) md.carry.deudaIds=md.carry.deudaIds.filter(x=>x!==id);
+  saveMonth(md); render();
+}
+function undoCarryAll(){
+  const md=getMonth();
+  if(!md.carry) return;
+  md.movimientos=md.movimientos.filter(m=>!md.carry.movIds.includes(m.id));
+  md.deudas=md.deudas.filter(d=>!md.carry.deudaIds.includes(d.id));
+  md.carry.movIds=[]; md.carry.deudaIds=[]; md.carry.dismissed=true;
+  saveMonth(md); render();
+}
+
+function carryBanner(md){
+  if(!md.carry||md.carry.dismissed) return '';
+  const movs=md.movimientos.filter(m=>md.carry.movIds.includes(m.id));
+  const deudas=md.deudas.filter(d=>md.carry.deudaIds.includes(d.id));
+  if(movs.length===0&&deudas.length===0) return '';
+  const parts=[];
+  if(movs.length>0) parts.push(`<strong>${movs.length}</strong> movimiento${movs.length>1?'s':''} recurrente${movs.length>1?'s':''}`);
+  if(deudas.length>0) parts.push(`<strong>${deudas.length}</strong> deuda${deudas.length>1?'s':''} con saldo pendiente`);
+  return `<div class="carry-banner">
+    <div class="carry-title">🔄 Mes nuevo — ${MONTHS_ES[currentMonth]} ${currentYear}</div>
+    <div class="carry-msg">Copiamos ${parts.join(' y ')} del mes anterior. ¿Todo correcto?</div>
+    ${movs.map(m=>`<div class="carry-item"><span>${iconFor(m.tipo,m.cat)} ${m.desc} · <span class="${m.tipo==='ingreso'?'pos':'neg'}">${m.tipo==='ingreso'?'+':'−'}${fmt(m.monto)}</span></span><button class="btn btn-sm btn-del" onclick="undoCarryMov(${m.id})">× Quitar</button></div>`).join('')}
+    ${deudas.map(d=>`<div class="carry-item"><span>🔴 ${d.acreedor} · <span class="neg">−${fmt(d.saldo)}</span></span><button class="btn btn-sm btn-del" onclick="undoCarryDeuda(${d.id})">× Quitar</button></div>`).join('')}
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-sm btn-save" onclick="dismissCarry()">✓ Todo correcto</button>
+      <button class="btn btn-sm btn-cancel" onclick="undoCarryAll()">Deshacer todo</button>
+    </div>
+  </div>`;
 }
 
 /* ── RENDER ── */
@@ -357,6 +454,7 @@ function renderResumen(){
   const recientes=md.movimientos.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')).slice(0,6);
   const deudaProx=md.deudas.filter(d=>d.fechaPago).sort((a,b)=>parseInt(a.fechaPago)-parseInt(b.fechaPago)).slice(0,3);
   document.getElementById('resumen').innerHTML=`
+    ${carryBanner(md)}
     <div class="cards">
       <div class="card"><div class="card-label">Ingresos</div><div class="card-value pos">${fmt(t.ingresos)}</div></div>
       <div class="card"><div class="card-label">Gastos</div><div class="card-value neg">${fmt(t.gastos)}</div></div>
@@ -375,7 +473,7 @@ function renderResumen(){
         recientes.map(m=>`<div class="list-item">
           <div class="item-main">
             <div class="item-desc">${iconFor(m.tipo,m.cat)} ${m.desc}
-              <span class="badge ${m.tipo==='ingreso'?'b-ing':m.subtipo==='fijo'?'b-fij':m.subtipo==='quincenal'||m.subtipo==='semanal'?'b-qui':'b-var'}">${m.tipo==='ingreso'?'ingreso':m.subtipo}</span>
+              <span class="badge ${m.tipo==='ingreso'?'b-ing':m.subtipo==='fijo'?'b-fij':m.subtipo==='quincenal'||m.subtipo==='semanal'?'b-qui':'b-var'}">${m.tipo==='ingreso'?('ingreso'+(m.subtipo==='fijo'||m.subtipo==='quincenal'?' · '+m.subtipo:'')):m.subtipo}</span>
             </div>
             <div class="item-meta">${fmtDate(m.fecha)} · ${m.cat||''}${m.nota?' · '+m.nota:''}</div>
           </div>
@@ -391,19 +489,20 @@ function renderMovimientos(){
   document.getElementById('movimientos').innerHTML=`
     <div class="panel good">
       <div class="panel-title">💼 Registrar ingreso — dinero que ENTRA</div>
-      <div class="explain-box">Un ingreso es cualquier dinero que <strong>entra a tu bolsillo</strong>: salario, freelance, alquiler cobrado, etc.</div>
+      <div class="explain-box">Un ingreso es cualquier dinero que <strong>entra a tu bolsillo</strong>: salario, freelance, alquiler cobrado, etc. Si lo marcas como <strong>fijo</strong> o <strong>quincenal</strong>, se copiará automáticamente al mes siguiente.</div>
       <div class="form-grid">
         <div class="form-group"><div class="form-label">Descripción</div><input id="ing-desc" placeholder="ej: salario mayo"></div>
         <div class="form-group"><div class="form-label">Monto $</div><input id="ing-monto" type="number" min="0" step="0.01" placeholder="0.00"></div>
         <div class="form-group"><div class="form-label">Fecha</div><input id="ing-fecha" type="date" value="${today()}"></div>
         <div class="form-group"><div class="form-label">Categoría de ingreso</div>${catSelectIngreso('ing-cat','Salario')}</div>
+        <div class="form-group"><div class="form-label">Frecuencia</div><select id="ing-subtipo"><option value="variable">Único / variable</option><option value="fijo">Fijo (cada mes)</option><option value="quincenal">Quincenal</option></select></div>
         <div class="form-group"><div class="form-label">Nota (opcional)</div><input id="ing-nota" placeholder="ej: quincena, pago cliente X"></div>
         <div class="form-group" style="justify-content:flex-end"><button class="btn" style="margin-top:18px" onclick="addMov('ingreso')">+ Registrar ingreso</button></div>
       </div>
     </div>
     <div class="panel danger">
       <div class="panel-title">💸 Registrar gasto — dinero que SALE</div>
-      <div class="explain-box">Un gasto es dinero que <strong>ya salió</strong>: pagaste gasolina, compraste comida, pagaste el gym. <strong>Fijo</strong> = mismo monto cada mes (alquiler, gym). <strong>Variable</strong> = cambia (comida, entretenimiento).</div>
+      <div class="explain-box">Un gasto es dinero que <strong>ya salió</strong>: pagaste gasolina, compraste comida, pagaste el gym. <strong>Fijo</strong> = mismo monto cada mes (alquiler, gym). <strong>Variable</strong> = cambia (comida, entretenimiento). Los gastos <strong>fijos</strong> y <strong>quincenales</strong> se copian automáticamente al mes siguiente.</div>
       <div class="form-grid">
         <div class="form-group"><div class="form-label">Descripción</div><input id="gas-desc" placeholder="ej: supermercado"></div>
         <div class="form-group"><div class="form-label">Monto $</div><input id="gas-monto" type="number" min="0" step="0.01" placeholder="0.00"></div>
@@ -423,7 +522,10 @@ function renderMovimientos(){
             <div class="form-group"><div class="form-label">Monto $</div><input id="e-monto-${m.id}" type="number" value="${m.monto}"></div>
             <div class="form-group"><div class="form-label">Fecha</div><input id="e-fecha-${m.id}" type="date" value="${m.fecha||''}"></div>
             <div class="form-group"><div class="form-label">Categoría</div>${m.tipo==='ingreso'?catSelectIngreso('e-cat-'+m.id,m.cat||'Salario'):catSelectGasto('e-cat-'+m.id,m.cat||'Otro gasto')}</div>
-            ${m.tipo==='gasto'?`<div class="form-group"><div class="form-label">Tipo</div><select id="e-subtipo-${m.id}"><option value="fijo"${m.subtipo==='fijo'?' selected':''}>Fijo</option><option value="variable"${m.subtipo==='variable'?' selected':''}>Variable</option></select></div>`:''}
+            <div class="form-group"><div class="form-label">${m.tipo==='gasto'?'Tipo':'Frecuencia'}</div><select id="e-subtipo-${m.id}">${(m.tipo==='gasto'
+              ?[['fijo','Fijo'],['quincenal','Quincenal'],['semanal','Semanal'],['variable','Variable']]
+              :[['variable','Único / variable'],['fijo','Fijo (cada mes)'],['quincenal','Quincenal']]
+            ).map(([v,l])=>`<option value="${v}"${m.subtipo===v?' selected':''}>${l}</option>`).join('')}</select></div>
             <div class="form-group"><div class="form-label">Nota</div><input id="e-nota-${m.id}" value="${m.nota||''}"></div>
           </div>
           <div style="display:flex;gap:8px;margin-top:10px">
@@ -434,7 +536,7 @@ function renderMovimientos(){
         return `<div class="list-item">
           <div class="item-main">
             <div class="item-desc">${iconFor(m.tipo,m.cat)} ${m.desc}
-              <span class="badge ${m.tipo==='ingreso'?'b-ing':m.subtipo==='fijo'?'b-fij':m.subtipo==='quincenal'||m.subtipo==='semanal'?'b-qui':'b-var'}">${m.tipo==='ingreso'?'ingreso':m.subtipo}</span>
+              <span class="badge ${m.tipo==='ingreso'?'b-ing':m.subtipo==='fijo'?'b-fij':m.subtipo==='quincenal'||m.subtipo==='semanal'?'b-qui':'b-var'}">${m.tipo==='ingreso'?('ingreso'+(m.subtipo==='fijo'||m.subtipo==='quincenal'?' · '+m.subtipo:'')):m.subtipo}</span>
             </div>
             <div class="item-meta">${fmtDate(m.fecha)} · ${m.cat||''}${m.nota?' · <em>'+m.nota+'</em>':''}</div>
           </div>
@@ -733,6 +835,7 @@ function importData(e){
 
 /* INIT */
 document.getElementById('month-label').textContent=`${MONTHS_ES[currentMonth]} ${currentYear}`;
+runCarryOver();
 render();
 </script>
 </body>
