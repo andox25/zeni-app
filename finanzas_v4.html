@@ -94,6 +94,10 @@ select option{background:var(--surface2)}
 .carry-msg{font-size:13px;line-height:1.7;margin-bottom:8px}
 .carry-item{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px}
 .carry-item span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.carry-banner.warn{border-color:var(--amber)}
+.carry-banner.warn .carry-title{color:var(--amber)}
+.saldo-item{background:var(--surface2);border:1px dashed var(--border);border-radius:6px;padding:10px 12px;margin-bottom:6px}
+.card.saldo-card{border-style:dashed}
 </style>
 </head>
 <body>
@@ -343,16 +347,17 @@ function saveMeta(){
 }
 
 /* ── CARRY-OVER (mes nuevo) ── */
-function runCarryOver(){
+function runCarryOver(y=currentYear,m=currentMonth,force=false){
   // Solo hacia adelante: nunca prellenar meses futuros al navegar con las flechas.
+  // "force" permite ejecutarlo sobre un mes destino al mover movimientos mal fechados.
   const now=new Date();
-  if(currentYear>now.getFullYear()||(currentYear===now.getFullYear()&&currentMonth>now.getMonth())) return;
-  const all=loadAll(), key=currentKey();
+  if(!force&&(y>now.getFullYear()||(y===now.getFullYear()&&m>now.getMonth()))) return;
+  const all=loadAll(), key=monthKey(y,m);
   const cur=all[key];
   // Si el mes ya tiene datos o ya se procesó el carry-over, no tocar nada.
   if(cur&&(cur.carry||cur.movimientos.length>0||cur.deudas.length>0||cur.meta)) return;
   // Buscar el mes más reciente con datos (hasta 6 meses atrás, sin pasar del inicio).
-  let py=currentYear, pm=currentMonth, prev=null;
+  let py=y, pm=m, prev=null;
   for(let i=0;i<6;i++){
     pm--; if(pm<0){pm=11;py--;}
     if(py<START_YEAR||(py===START_YEAR&&pm<START_MONTH)) break;
@@ -364,7 +369,7 @@ function runCarryOver(){
   const pendientes=(prev.deudas||[]).filter(d=>d.saldo>0);
   if(recurrentes.length===0&&pendientes.length===0) return;
   const md=cur||{movimientos:[],deudas:[],meta:null};
-  const fecha1=`${currentYear}-${String(currentMonth+1).padStart(2,'0')}-01`;
+  const fecha1=`${y}-${String(m+1).padStart(2,'0')}-01`;
   const base=Date.now();
   const carry={fecha:today(),movIds:[],deudaIds:[],dismissed:false};
   recurrentes.forEach((m,i)=>{
@@ -431,6 +436,81 @@ function carryBanner(md){
   </div>`;
 }
 
+/* ── MOVIMIENTOS MAL FECHADOS ── */
+function nextMonthOf(y,m){ let ny=y,nm=m+1; if(nm>11){nm=0;ny++;} return {ny,nm}; }
+
+function misdatedMovs(md){
+  // Movimientos guardados en el mes visible pero cuya fecha pertenece al mes siguiente.
+  const ig=md.misdatedIgnored||[];
+  const {ny,nm}=nextMonthOf(currentYear,currentMonth);
+  const pref=`${ny}-${String(nm+1).padStart(2,'0')}-`;
+  return md.movimientos.filter(m=>m.fecha&&m.fecha.startsWith(pref)&&!ig.includes(m.id));
+}
+
+function moveMisdated(){
+  const {ny,nm}=nextMonthOf(currentYear,currentMonth);
+  // Si el mes destino está vacío, primero recibe sus recurrentes para no perder el carry-over.
+  runCarryOver(ny,nm,true);
+  const all=loadAll(), key=currentKey(), tkey=monthKey(ny,nm);
+  const md=all[key]; if(!md) return;
+  const movs=misdatedMovs(md);
+  if(movs.length===0) return;
+  if(!all[tkey]) all[tkey]={movimientos:[],deudas:[],meta:null};
+  const ids=movs.map(m=>m.id);
+  movs.forEach(m=>all[tkey].movimientos.push(m));
+  md.movimientos=md.movimientos.filter(m=>!ids.includes(m.id));
+  saveAll(all); render();
+}
+
+function ignoreMisdated(){
+  const md=getMonth();
+  md.misdatedIgnored=[...(md.misdatedIgnored||[]),...misdatedMovs(md).map(m=>m.id)];
+  saveMonth(md); render();
+}
+
+function misdatedBanner(md){
+  const movs=misdatedMovs(md);
+  if(movs.length===0) return '';
+  const {nm}=nextMonthOf(currentYear,currentMonth);
+  const pl=movs.length>1;
+  return `<div class="carry-banner warn">
+    <div class="carry-title">📅 Fechas fuera de mes</div>
+    <div class="carry-msg">Encontramos <strong>${movs.length}</strong> movimiento${pl?'s':''} con fecha de <strong>${MONTHS_ES[nm]}</strong> registrado${pl?'s':''} en <strong>${MONTHS_ES[currentMonth]}</strong>. ¿Lo${pl?'s':''} movemos a ${MONTHS_ES[nm]}?</div>
+    ${movs.map(m=>`<div class="carry-item"><span>${iconFor(m.tipo,m.cat)} ${m.desc} · ${fmtDate(m.fecha)} · <span class="${m.tipo==='ingreso'?'pos':'neg'}">${m.tipo==='ingreso'?'+':'−'}${fmt(m.monto)}</span></span></div>`).join('')}
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-sm btn-save" onclick="moveMisdated()">Sí, mover a ${MONTHS_ES[nm]}</button>
+      <button class="btn btn-sm btn-cancel" onclick="ignoreMisdated()">No, dejarlos</button>
+    </div>
+  </div>`;
+}
+
+/* ── SALDO DEL MES ANTERIOR (calculado, no se guarda) ── */
+function saldoAnterior(){
+  let py=currentYear, pm=currentMonth-1;
+  if(pm<0){pm=11;py--;}
+  if(py<START_YEAR||(py===START_YEAR&&pm<START_MONTH)) return null;
+  const prev=loadAll()[monthKey(py,pm)];
+  if(!prev||!prev.movimientos||prev.movimientos.length===0) return null;
+  const ingresos=prev.movimientos.filter(m=>m.tipo==='ingreso').reduce((a,m)=>a+m.monto,0);
+  const gastos=prev.movimientos.filter(m=>m.tipo==='gasto').reduce((a,m)=>a+m.monto,0);
+  const monto=ingresos-gastos;
+  if(monto===0) return null;
+  return {monto,mes:MONTHS_ES[pm]};
+}
+
+function saldoAnteriorItem(){
+  const sa=saldoAnterior();
+  if(!sa) return '';
+  const pos=sa.monto>=0, color=pos?'var(--muted)':'var(--red)';
+  return `<div class="list-item saldo-item">
+    <div class="item-main">
+      <div class="item-desc" style="color:${color}">${pos?'⏮':'⚠️'} ${pos?'Saldo anterior':'Deuda arrastrada'} (${sa.mes})</div>
+      <div class="item-meta">Arrastre automático del mes anterior · no es un ${pos?'ingreso':'gasto'} nuevo</div>
+    </div>
+    <div class="item-right"><span class="item-amount" style="color:${color}">${pos?'+':'−'}${fmt(sa.monto)}</span></div>
+  </div>`;
+}
+
 /* ── RENDER ── */
 function render(){
   renderResumen();
@@ -453,10 +533,13 @@ function renderResumen(){
   const proyeccion=dailyAvg*daysInMonth;
   const recientes=md.movimientos.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')).slice(0,6);
   const deudaProx=md.deudas.filter(d=>d.fechaPago).sort((a,b)=>parseInt(a.fechaPago)-parseInt(b.fechaPago)).slice(0,3);
+  const sa=saldoAnterior();
   document.getElementById('resumen').innerHTML=`
     ${carryBanner(md)}
+    ${misdatedBanner(md)}
     <div class="cards">
       <div class="card"><div class="card-label">Ingresos</div><div class="card-value pos">${fmt(t.ingresos)}</div></div>
+      ${sa?`<div class="card saldo-card"><div class="card-label">${sa.monto>=0?'Saldo anterior':'Deuda arrastrada'}</div><div class="card-value" style="color:${sa.monto>=0?'var(--muted)':'var(--red)'}">${sa.monto>=0?'+':'−'}${fmt(sa.monto)}</div></div>`:''}
       <div class="card"><div class="card-label">Gastos</div><div class="card-value neg">${fmt(t.gastos)}</div></div>
       <div class="card ${pct>90?'alert-card':''}"><div class="card-label">Flujo neto</div><div class="card-value ${t.flujo>=0?'pos':'neg'}">${t.flujo>=0?'+':'−'}${fmt(t.flujo)}</div></div>
       <div class="card"><div class="card-label">% gastado</div><div class="card-value ${pct>90?'neg':pct>70?'neu':'pos'}">${t.ingresos>0?pct+'%':'—'}</div></div>
@@ -487,6 +570,7 @@ function renderMovimientos(){
   const md=getMonth();
   const sorted=md.movimientos.slice().sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
   document.getElementById('movimientos').innerHTML=`
+    ${misdatedBanner(md)}
     <div class="panel good">
       <div class="panel-title">💼 Registrar ingreso — dinero que ENTRA</div>
       <div class="explain-box">Un ingreso es cualquier dinero que <strong>entra a tu bolsillo</strong>: salario, freelance, alquiler cobrado, etc. Si lo marcas como <strong>fijo</strong> o <strong>quincenal</strong>, se copiará automáticamente al mes siguiente.</div>
@@ -515,6 +599,7 @@ function renderMovimientos(){
     </div>
     <div class="panel">
       <div class="panel-title">Todos los movimientos — ${MONTHS_ES[currentMonth]} ${currentYear}</div>
+      ${saldoAnteriorItem()}
       ${sorted.length===0?'<div class="empty">Sin movimientos este mes.</div>':sorted.map(m=>{
         if(editingId===m.id) return `<div class="edit-row">
           <div class="form-grid">
