@@ -272,6 +272,33 @@ select option{background:var(--surface2)}
 </div>
 
 <!-- ============================================================
+     MFA — VERIFICACIÓN AL INICIAR SESIÓN
+     ============================================================ -->
+<div id="mfa-verify-screen" style="display:none;position:fixed;inset:0;background:var(--bg);align-items:center;justify-content:center;z-index:1001;padding:1.5rem;">
+  <div class="auth-card" style="text-align:center">
+    <div class="confirm-icon">🔒</div>
+    <div class="confirm-title">Verificación en dos pasos</div>
+    <p class="confirm-text">Ingresa el código de 6 dígitos de tu app de autenticación (Google Authenticator, Authy…).</p>
+    <div class="auth-error" id="mfa-verify-error"></div>
+    <input type="text" id="mfa-login-code" class="form-input" placeholder="000000" maxlength="6" inputmode="numeric" autocomplete="one-time-code" style="text-align:center;font-size:18px;letter-spacing:6px;margin-bottom:10px">
+    <button class="btn-primary" onclick="verifyMfaLogin()">Verificar</button>
+    <div class="auth-toggle"><a onclick="logout()">Cancelar y cerrar sesión</a></div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MFA — PANEL DE CONFIGURACIÓN
+     ============================================================ -->
+<div id="mfa-setup-screen" style="display:none;position:fixed;inset:0;background:rgba(14,14,14,.94);align-items:center;justify-content:center;z-index:1001;padding:1.5rem;">
+  <div class="auth-card">
+    <div class="confirm-title" style="text-align:center">Verificación en dos pasos</div>
+    <div class="auth-error" id="mfa-setup-error"></div>
+    <div id="mfa-setup-body"></div>
+    <div class="auth-toggle"><a onclick="closeMfaPanel()">Cerrar</a></div>
+  </div>
+</div>
+
+<!-- ============================================================
      USER BAR
      ============================================================ -->
 <div id="user-bar">
@@ -279,7 +306,12 @@ select option{background:var(--surface2)}
     <div class="user-avatar" id="user-avatar">—</div>
     <span class="user-email" id="user-email-display"></span>
   </div>
-  <button class="btn-logout" onclick="logout()">Cerrar sesión</button>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <button class="btn-logout" style="border-color:var(--accent);color:var(--accent)" onclick="importarV4()">⬆ Importar v4</button>
+    <button class="btn-logout" onclick="openMfaPanel()">🔒 2FA</button>
+    <button class="btn-logout" onclick="logout()">Cerrar sesión</button>
+  </div>
+  <input type="file" id="import-file" accept=".json" style="display:none" onchange="importarV4File(event)">
 </div>
 
 <!-- ============================================================
@@ -435,8 +467,8 @@ select option{background:var(--surface2)}
 // ============================================================
 // ⚙️  CONFIGURACIÓN — Pega tus credenciales de Supabase aquí
 // ============================================================
-const SUPABASE_URL  = 'TU_SUPABASE_URL';   // https://xxxx.supabase.co
-const SUPABASE_KEY  = 'TU_SUPABASE_ANON_KEY'; // eyJh...
+const SUPABASE_URL  = 'https://bccmjsrcadkbchglrkdc.supabase.co';
+const SUPABASE_KEY  = 'sb_publishable_NNxfzAKcY32IegCweItesA_4sG2fNDG'; // clave publica (anon) — protegida por RLS
 
 // ============================================================
 // INIT SUPABASE
@@ -445,8 +477,21 @@ const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let currentUser  = null;
-let currentMonth = new Date().toISOString().slice(0,7); // "2026-05"
-let data = { movimientos: [], deudas: [], fondos: [] };
+// Fechas en hora LOCAL (toISOString usa UTC y puede desfasar el mes en la noche)
+function ymLocal(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+function todayLocal(){ const d=new Date(); return `${ymLocal(d)}-${String(d.getDate()).padStart(2,'0')}`; }
+let currentMonth = ymLocal(new Date()); // "2026-07"
+let data = { movimientos: [], deudas: [], fondos: [], entradas: [] };
+
+// ============================================================
+// RATE LIMITING DE LOGIN — 5 intentos fallidos → bloqueo 15 min
+// ============================================================
+const MAX_LOGIN_ATTEMPTS = 5, LOCKOUT_MS = 15*60*1000;
+function getLock(){ try{ return JSON.parse(localStorage.getItem('zeni-login-lock'))||{fails:0,until:0}; }catch(e){ return {fails:0,until:0}; } }
+function setLock(l){ localStorage.setItem('zeni-login-lock',JSON.stringify(l)); }
+function lockRemaining(){ const l=getLock(); return l.until>Date.now()?l.until-Date.now():0; }
+function registerFail(){ const l=getLock(); l.fails++; if(l.fails>=MAX_LOGIN_ATTEMPTS){ l.until=Date.now()+LOCKOUT_MS; l.fails=0; } setLock(l); return l; }
+function clearLock(){ setLock({fails:0,until:0}); }
 
 // ============================================================
 // AUTH FUNCTIONS
@@ -470,13 +515,18 @@ async function registerEmail() {
   const btn = document.querySelector('#auth-form-register .btn-primary');
   btn.disabled = true; btn.textContent = 'Creando cuenta...';
 
-  const { error } = await db.auth.signUp({
+  const { data: signUpData, error } = await db.auth.signUp({
     email, password,
     options: { emailRedirectTo: window.location.origin }
   });
 
   btn.disabled = false; btn.textContent = 'Crear cuenta';
   if (error) { showError(error.message); return; }
+  // Supabase no revela si el correo ya existe: lo detectamos por identities vacio
+  if (signUpData?.user && Array.isArray(signUpData.user.identities) && signUpData.user.identities.length === 0) {
+    showError('Este correo ya tiene una cuenta. Inicia sesión.');
+    return;
+  }
 
   document.getElementById('confirm-email-display').textContent = email;
   document.getElementById('auth-screen').style.display = 'none';
@@ -489,18 +539,31 @@ async function loginEmail() {
   const password = document.getElementById('login-password').value;
   if (!email || !password) return showError('Completa todos los campos.');
 
+  const rem = lockRemaining();
+  if (rem > 0) return showError(`Demasiados intentos fallidos. Espera ${Math.ceil(rem/60000)} min e intenta de nuevo.`);
+
   showError('');
   const btn = document.querySelector('#auth-form-login .btn-primary');
   btn.disabled = true; btn.textContent = 'Entrando...';
 
   const { error } = await db.auth.signInWithPassword({ email, password });
   btn.disabled = false; btn.textContent = 'Iniciar sesión';
-  if (error) showError('Correo o contraseña incorrectos.');
+  if (error) {
+    if ((error.message||'').toLowerCase().includes('not confirmed')) {
+      showError('Tu cuenta aún no está confirmada. Revisa tu correo (y la carpeta de spam) y haz clic en el enlace de activación.');
+      return;
+    }
+    const l = registerFail();
+    if (l.until > Date.now()) showError('Demasiados intentos fallidos. Cuenta bloqueada por 15 minutos.');
+    else showError(`Correo o contraseña incorrectos. Te quedan ${MAX_LOGIN_ATTEMPTS - l.fails} intento${MAX_LOGIN_ATTEMPTS-l.fails!==1?'s':''}.`);
+    return;
+  }
+  clearLock();
 }
 
 async function logout() {
   await db.auth.signOut();
-  data = { movimientos: [], deudas: [], fondos: [] };
+  data = { movimientos: [], deudas: [], fondos: [], entradas: [] };
   currentUser = null;
 }
 
@@ -513,31 +576,131 @@ function showLogin()    { document.getElementById('auth-form-register').style.di
 function showRegister() { document.getElementById('auth-form-login').style.display='none'; document.getElementById('auth-form-register').style.display='block'; showError(''); }
 
 // ============================================================
+// 2FA — TOTP (Google Authenticator / Authy)
+// ============================================================
+function showMfaVerifyError(m){ const el=document.getElementById('mfa-verify-error'); el.textContent=m; el.style.display=m?'block':'none'; }
+function showMfaSetupError(m){ const el=document.getElementById('mfa-setup-error'); el.textContent=m; el.style.display=m?'block':'none'; }
+
+// Puerta 2FA: si la cuenta tiene un factor verificado, exigir código antes de abrir la app
+async function mfaGate() {
+  try {
+    const { data, error } = await db.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (error || !data) return true; // no bloquear la app por un fallo del check
+    if (data.nextLevel === 'aal2' && data.currentLevel !== 'aal2') {
+      document.getElementById('auth-screen').style.display    = 'none';
+      document.getElementById('confirm-screen').style.display = 'none';
+      document.getElementById('user-bar').style.display       = 'none';
+      document.getElementById('app-screen').style.display     = 'none';
+      document.getElementById('mfa-verify-screen').style.display = 'flex';
+      return false;
+    }
+    document.getElementById('mfa-verify-screen').style.display = 'none';
+    return true;
+  } catch(e) { return true; }
+}
+
+async function verifyMfaLogin() {
+  const code = document.getElementById('mfa-login-code').value.trim();
+  if (code.length !== 6) return showMfaVerifyError('Ingresa el código de 6 dígitos.');
+  showMfaVerifyError('');
+  const { data: factors, error: fe } = await db.auth.mfa.listFactors();
+  if (fe || !factors.totp.length) return showMfaVerifyError('No se encontró el factor 2FA de tu cuenta.');
+  const { error } = await db.auth.mfa.challengeAndVerify({ factorId: factors.totp[0].id, code });
+  if (error) return showMfaVerifyError('Código incorrecto. Intenta de nuevo.');
+  document.getElementById('mfa-login-code').value = '';
+  document.getElementById('mfa-verify-screen').style.display = 'none';
+  const { data: { session } } = await db.auth.getSession();
+  if (session) await enterApp(session);
+}
+
+let enrollingFactorId = null;
+
+async function openMfaPanel() {
+  document.getElementById('mfa-setup-screen').style.display = 'flex';
+  showMfaSetupError('');
+  const body = document.getElementById('mfa-setup-body');
+  body.innerHTML = '<div class="empty">Cargando…</div>';
+  const { data, error } = await db.auth.mfa.listFactors();
+  if (error) { body.innerHTML = '<div class="empty">Error al consultar el estado de 2FA.</div>'; return; }
+  const f = data.totp && data.totp[0];
+  if (f) {
+    body.innerHTML = `
+      <p class="confirm-text" style="text-align:center">✅ 2FA está <strong style="color:var(--green)">activo</strong> en tu cuenta.<br>Al iniciar sesión se pedirá un código de tu app de autenticación.</p>
+      <button class="btn btn-danger" onclick="disableMfa('${f.id}')">Desactivar 2FA</button>`;
+  } else {
+    body.innerHTML = `
+      <p class="confirm-text" style="text-align:center">Protege tu cuenta: al iniciar sesión se pedirá también un código de Google Authenticator o Authy.</p>
+      <button class="btn-primary" onclick="startMfaEnroll()">Activar 2FA</button>`;
+  }
+}
+function closeMfaPanel(){ document.getElementById('mfa-setup-screen').style.display = 'none'; }
+
+async function startMfaEnroll() {
+  showMfaSetupError('');
+  const { data, error } = await db.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Zeni-' + Date.now() });
+  if (error) { showMfaSetupError(error.message); return; }
+  enrollingFactorId = data.id;
+  document.getElementById('mfa-setup-body').innerHTML = `
+    <p class="confirm-text" style="text-align:center">1 · Escanea este código con tu app de autenticación:</p>
+    <div style="text-align:center;margin-bottom:10px"><img src="${data.totp.qr_code}" alt="QR 2FA" style="width:180px;height:180px;background:#fff;padding:8px;border-radius:8px"></div>
+    <p class="confirm-text" style="text-align:center">O ingresa esta clave manualmente:<br><strong style="color:var(--text);word-break:break-all">${data.totp.secret}</strong></p>
+    <p class="confirm-text" style="text-align:center">2 · Escribe el código de 6 dígitos que muestra la app:</p>
+    <input type="text" id="mfa-enroll-code" class="form-input" placeholder="000000" maxlength="6" inputmode="numeric" style="text-align:center;letter-spacing:6px;margin-bottom:10px">
+    <button class="btn-primary" onclick="verifyMfaEnroll()">Confirmar y activar</button>`;
+}
+
+async function verifyMfaEnroll() {
+  const code = document.getElementById('mfa-enroll-code').value.trim();
+  if (code.length !== 6) return showMfaSetupError('Ingresa el código de 6 dígitos.');
+  showMfaSetupError('');
+  const { data: ch, error: ce } = await db.auth.mfa.challenge({ factorId: enrollingFactorId });
+  if (ce) return showMfaSetupError(ce.message);
+  const { error } = await db.auth.mfa.verify({ factorId: enrollingFactorId, challengeId: ch.id, code });
+  if (error) return showMfaSetupError('Código incorrecto. Verifica que la hora de tu teléfono sea automática e intenta de nuevo.');
+  document.getElementById('mfa-setup-body').innerHTML = `
+    <p class="confirm-text" style="text-align:center">✅ <strong style="color:var(--green)">2FA activado.</strong><br>Desde ahora, al iniciar sesión se pedirá un código de tu app.</p>`;
+}
+
+async function disableMfa(factorId) {
+  if (!confirm('¿Desactivar la verificación en dos pasos?')) return;
+  const { error } = await db.auth.mfa.unenroll({ factorId });
+  if (error) { showMfaSetupError(error.message); return; }
+  openMfaPanel();
+}
+
+// ============================================================
 // AUTH STATE LISTENER
 // ============================================================
+async function enterApp(session) {
+  currentUser = session.user;
+  document.getElementById('auth-screen').style.display    = 'none';
+  document.getElementById('confirm-screen').style.display = 'none';
+  document.getElementById('user-bar').style.display       = 'flex';
+  document.getElementById('app-screen').style.display     = 'block';
+
+  // User bar
+  const email = currentUser.email;
+  const avatar = currentUser.user_metadata?.avatar_url;
+  document.getElementById('user-email-display').textContent = email;
+  const avatarEl = document.getElementById('user-avatar');
+  if (avatar) avatarEl.innerHTML = `<img src="${avatar}" alt="">`;
+  else avatarEl.textContent = email[0].toUpperCase();
+
+  await loadAllData();
+  renderAll();
+}
+
 db.auth.onAuthStateChange(async (event, session) => {
   if (session && session.user) {
-    currentUser = session.user;
-    document.getElementById('auth-screen').style.display    = 'none';
-    document.getElementById('confirm-screen').style.display = 'none';
-    document.getElementById('user-bar').style.display       = 'flex';
-    document.getElementById('app-screen').style.display     = 'block';
-
-    // User bar
-    const email = currentUser.email;
-    const avatar = currentUser.user_metadata?.avatar_url;
-    document.getElementById('user-email-display').textContent = email;
-    const avatarEl = document.getElementById('user-avatar');
-    if (avatar) avatarEl.innerHTML = `<img src="${avatar}" alt="">`;
-    else avatarEl.textContent = email[0].toUpperCase();
-
-    await loadAllData();
-    renderAll();
+    if (!(await mfaGate())) return; // cuenta con 2FA: pedir código primero
+    await enterApp(session);
   } else {
     currentUser = null;
     document.getElementById('auth-screen').style.display    = 'flex';
     document.getElementById('user-bar').style.display       = 'none';
     document.getElementById('app-screen').style.display     = 'none';
+    document.getElementById('mfa-verify-screen').style.display = 'none';
+    document.getElementById('mfa-setup-screen').style.display  = 'none';
   }
 });
 
@@ -547,14 +710,16 @@ db.auth.onAuthStateChange(async (event, session) => {
 async function loadAllData() {
   setSyncStatus('syncing');
   try {
-    const [movRes, deuRes, fonRes] = await Promise.all([
+    const [movRes, deuRes, fonRes, entRes] = await Promise.all([
       db.from('movimientos').select('*').eq('user_id', currentUser.id).order('fecha', {ascending:false}),
       db.from('deudas').select('*').eq('user_id', currentUser.id).order('created_at', {ascending:false}),
       db.from('fondos').select('*').eq('user_id', currentUser.id).order('created_at', {ascending:true}),
+      db.from('fondo_entradas').select('*').eq('user_id', currentUser.id),
     ]);
     data.movimientos = movRes.data || [];
     data.deudas      = deuRes.data || [];
     data.fondos      = fonRes.data || [];
+    data.entradas    = entRes.data || [];
     setSyncStatus('synced');
   } catch(e) { setSyncStatus('error'); }
 }
@@ -565,6 +730,90 @@ function setSyncStatus(status) {
   if (status === 'syncing') el.textContent = '· sincronizando...';
   else if (status === 'synced') el.textContent = '· sincronizado';
   else el.textContent = '· error de conexión';
+}
+
+// ============================================================
+// IMPORTAR DATOS DE v4 (localStorage o archivo exportado)
+// ============================================================
+function importarV4() {
+  const raw = localStorage.getItem('finanzas-v4');
+  if (raw) { processV4Import(raw); }
+  else {
+    alert('No encontramos datos de la versión anterior en este navegador.\nSelecciona el archivo JSON que exportaste desde v4 (botón "Exportar mis datos").');
+    document.getElementById('import-file').click();
+  }
+}
+
+function importarV4File(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => processV4Import(ev.target.result);
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+// Convierte la estructura v4 a filas de Supabase.
+// OJO: las claves de mes v4 son 0-indexadas ("2026-05" = Junio); las fechas ISO sí son normales.
+function v4ToRows(all) {
+  const movRows = [], deudaRows = [];
+  const keys = Object.keys(all).filter(k => /^\d{4}-\d{2}$/.test(k)).sort();
+  keys.forEach(k => {
+    const [y, m0] = k.split('-').map(Number);
+    const fallback = `${y}-${String(m0+1).padStart(2,'0')}-01`;
+    ((all[k]||{}).movimientos||[]).forEach(mv => {
+      if (!mv || typeof mv.monto !== 'number' || mv.monto <= 0) return;
+      movRows.push({
+        user_id: currentUser.id, tipo: mv.tipo, subtipo: mv.subtipo||'',
+        descripcion: mv.desc||'—', monto: mv.monto,
+        fecha: /^\d{4}-\d{2}-\d{2}$/.test(mv.fecha||'') ? mv.fecha : fallback,
+        categoria: mv.cat||'', nota: mv.nota||''
+      });
+    });
+  });
+  // Deudas: solo el mes más reciente que tenga (es el estado vigente; los meses previos son copias del carry-over)
+  for (let i = keys.length-1; i >= 0; i--) {
+    const ds = (all[keys[i]]||{}).deudas||[];
+    if (ds.length) {
+      ds.forEach(d => deudaRows.push({
+        user_id: currentUser.id, acreedor: d.acreedor||'—', saldo: d.saldo||0,
+        fecha_pago: d.fechaPago||'', nota: d.nota||''
+      }));
+      break;
+    }
+  }
+  const fondos = (all.__global && all.__global.fondos) || [];
+  return { movRows, deudaRows, fondos };
+}
+
+async function processV4Import(raw) {
+  let all;
+  try { all = JSON.parse(raw); } catch(e) { alert('Archivo inválido. Usa el JSON exportado desde v4.'); return; }
+  const { movRows, deudaRows, fondos } = v4ToRows(all);
+  const nEntradas = fondos.reduce((a,f)=>a+((f.entradas||[]).length),0);
+  if (!movRows.length && !deudaRows.length && !fondos.length) { alert('No hay datos de v4 para importar.'); return; }
+  let msg = `Se importarán a tu cuenta:\n· ${movRows.length} movimientos\n· ${deudaRows.length} deudas (estado más reciente)\n· ${fondos.length} fondos (${nEntradas} aportes)`;
+  if (data.movimientos.length > 0) msg += '\n\n⚠ Tu cuenta ya tiene movimientos: importar de nuevo puede crear duplicados.';
+  if (!confirm(msg + '\n\n¿Continuar?')) return;
+  setSyncStatus('syncing');
+  try {
+    if (movRows.length)  { const {error} = await db.from('movimientos').insert(movRows); if (error) throw error; }
+    if (deudaRows.length){ const {error} = await db.from('deudas').insert(deudaRows);    if (error) throw error; }
+    for (const f of fondos) {
+      const {data: nf, error} = await db.from('fondos').insert([{user_id: currentUser.id, nombre: f.nombre||'Fondo'}]).select().single();
+      if (error) throw error;
+      const ent = (f.entradas||[]).map(e2 => ({
+        fondo_id: nf.id, user_id: currentUser.id, monto: e2.monto||0, nota: e2.nota||'',
+        fecha: /^\d{4}-\d{2}-\d{2}$/.test(e2.fecha||'') ? e2.fecha : todayLocal()
+      })).filter(e2 => e2.monto !== 0);
+      if (ent.length) { const {error: e3} = await db.from('fondo_entradas').insert(ent); if (e3) throw e3; }
+    }
+    await loadAllData();
+    renderAll();
+    alert('✅ Importación completada. Tus datos de v4 ya están en tu cuenta.');
+  } catch(e) {
+    setSyncStatus('error');
+    alert('Error al importar: ' + (e.message||e));
+  }
 }
 
 // ============================================================
@@ -593,7 +842,7 @@ async function addMovimiento() {
   document.getElementById('m-desc').value = '';
   document.getElementById('m-monto').value = '';
   document.getElementById('m-nota').value = '';
-  document.getElementById('m-fecha').value = new Date().toISOString().split('T')[0];
+  document.getElementById('m-fecha').value = todayLocal();
 
   renderAll();
 }
@@ -667,8 +916,7 @@ async function deleteFondo(id) {
 // ============================================================
 function changeMonth(dir) {
   const [y, m] = currentMonth.split('-').map(Number);
-  const d = new Date(y, m - 1 + dir, 1);
-  currentMonth = d.toISOString().slice(0,7);
+  currentMonth = ymLocal(new Date(y, m - 1 + dir, 1));
   renderAll();
 }
 
@@ -780,7 +1028,7 @@ function renderFondos() {
     <div class="fondo-item">
       <div class="fondo-info">
         <div class="fondo-name">${f.nombre}</div>
-        <div class="fondo-total">$0.00 acumulado</div>
+        <div class="fondo-total">${fmt((data.entradas||[]).filter(e=>e.fondo_id===f.id).reduce((a,e)=>a+Number(e.monto),0))} acumulado</div>
       </div>
       <div class="fondo-actions">
         <button class="btn btn-sm btn-del" onclick="deleteFondo('${f.id}')">×</button>
@@ -793,7 +1041,7 @@ function renderFondos() {
 // ============================================================
 window.addEventListener('DOMContentLoaded', () => {
   // Fecha de hoy por defecto en el form
-  document.getElementById('m-fecha').value = new Date().toISOString().split('T')[0];
+  document.getElementById('m-fecha').value = todayLocal();
   renderAll();
 });
 </script>
