@@ -2,7 +2,7 @@
   "name": "Zeni",
   "short_name": "Zeni",
   "description": "¿Dónde realmente va tu dinero?",
-  "start_url": "/finanzas_v5.html",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#0e0e0e",
   "theme_color": "#d4af37",
